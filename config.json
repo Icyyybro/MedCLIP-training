@@ -1,0 +1,21 @@
+{
+    "data_path": "/root/autodl-tmp/mimic_cxr/datasets.pkl",
+    "model_save_path": "/root/autodl-tmp/model/medclip/checkpoints",
+    "medclip_weight_dir": "/root/autodl-tmp/model/medclip/pretrained",
+    "bert_path": "/root/autodl-tmp/model/medclip/pretrained/bert-model/Bio_ClinicalBERT",
+    "vit_path": "/root/autodl-tmp/model/medclip/pretrained/vit-model/swin-tiny-patch4-window7-224",
+    "batch_size": 64,
+    "eval_batch_size": 32,
+    "num_epochs": 50,
+    "lr": 2e-5,
+    "weight_decay": 1e-4,
+    "num_workers": 2,
+    "gpu_id": 0,
+    "seed": 42,
+    "use_pretrained": true,
+    "use_amp": true,
+    "debug": false,
+    "log_interval": 10,
+    "save_interval": 1,
+    "log_level": "INFO"
+}
