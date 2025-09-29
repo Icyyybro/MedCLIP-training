@@ -7,9 +7,6 @@ echo "开始MedCLIP训练..."
 export CUDA_VISIBLE_DEVICES=0
 export PYTHONPATH=/root/MedCLIP-main:$PYTHONPATH
 
-# 创建必要的目录
-mkdir -p /root/autodl-tmp/model/medclip/checkpoints
-mkdir -p /root/autodl-tmp/model/medclip/pretrained
 
 # 进入工作目录
 cd /root/MedCLIP-main

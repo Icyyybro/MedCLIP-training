@@ -369,18 +369,47 @@ def main():
     logger.info("="*60)
     logger.info("MedCLIP训练")
     logger.info("="*60)
-    logger.info(f"数据路径: {config['data_path']}")
-    logger.info(f"批大小: {config['batch_size']}")
-    logger.info(f"学习率: {config['lr']}")
-    logger.info(f"训练轮数: {config['num_epochs']}")
-    logger.info(f"使用预训练权重: {config['use_pretrained']}")
-    logger.info(f"日志文件: {log_file}")
+    
+    # 记录所有配置信息
+    logger.info("训练配置信息:")
+    logger.info(f"  数据路径: {config['data_path']}")
+    logger.info(f"  模型保存路径: {config['model_save_path']}")
+    logger.info(f"  预训练权重目录: {config['medclip_weight_dir']}")
+    logger.info(f"  BERT模型路径: {config['bert_path']}")
+    logger.info(f"  ViT模型路径: {config['vit_path']}")
+    logger.info(f"  训练批大小: {config['batch_size']}")
+    logger.info(f"  验证批大小: {config['eval_batch_size']}")
+    logger.info(f"  训练轮数: {config['num_epochs']}")
+    logger.info(f"  学习率: {config['lr']}")
+    logger.info(f"  权重衰减: {config['weight_decay']}")
+    logger.info(f"  数据加载工作进程数: {config['num_workers']}")
+    logger.info(f"  GPU ID: {config['gpu_id']}")
+    logger.info(f"  随机种子: {config['seed']}")
+    logger.info(f"  使用预训练权重: {config['use_pretrained']}")
+    logger.info(f"  使用混合精度训练: {config['use_amp']}")
+    logger.info(f"  调试模式: {config['debug']}")
+    logger.info(f"  日志输出间隔: {config['log_interval']}")
+    logger.info(f"  模型保存间隔: {config['save_interval']}")
+    logger.info(f"  日志级别: {config['log_level']}")
+    logger.info(f"  日志文件: {log_file}")
     logger.info("="*60)
     
     # 设置环境
     os.environ['CUDA_VISIBLE_DEVICES'] = str(config['gpu_id'])
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
     logger.info(f"使用设备: {device}")
+    
+    # 记录系统信息
+    logger.info("系统信息:")
+    logger.info(f"  PyTorch版本: {torch.__version__}")
+    logger.info(f"  CUDA可用: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        logger.info(f"  CUDA版本: {torch.version.cuda}")
+        logger.info(f"  GPU数量: {torch.cuda.device_count()}")
+        logger.info(f"  当前GPU: {torch.cuda.get_device_name(0)}")
+        logger.info(f"  GPU显存: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+    logger.info(f"  Python版本: {os.sys.version}")
+    logger.info("="*60)
     
     # 设置随机种子
     set_random_seed(config['seed'])
