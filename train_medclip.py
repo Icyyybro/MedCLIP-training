@@ -192,7 +192,7 @@ def create_data_loaders(config, logger):
         texts = [item[1] for item in batch]
         img_labels = torch.stack([item[2] for item in batch])
         
-        enc = tokenizer(texts, padding='max_length', truncation=True, max_length=77, return_tensors='pt')
+        enc = tokenizer(texts, padding='max_length', truncation=True, max_length=config['max_text_length'], return_tensors='pt')
         return {
             'pixel_values': images,
             'input_ids': enc['input_ids'],
@@ -391,6 +391,7 @@ def main():
     logger.info(f"  日志输出间隔: {config['log_interval']}")
     logger.info(f"  模型保存间隔: {config['save_interval']}")
     logger.info(f"  日志级别: {config['log_level']}")
+    logger.info(f"  最大文本长度: {config['max_text_length']}")
     logger.info(f"  日志文件: {log_file}")
     logger.info("="*60)
     

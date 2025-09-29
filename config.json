@@ -4,7 +4,7 @@
     "medclip_weight_dir": "/root/autodl-tmp/model/medclip/pretrained",
     "bert_path": "/root/autodl-tmp/model/medclip/pretrained/bert-model/Bio_ClinicalBERT",
     "vit_path": "/root/autodl-tmp/model/medclip/pretrained/vit-model/swin-tiny-patch4-window7-224",
-    "batch_size": 128,
+    "batch_size": 64,
     "eval_batch_size": 32,
     "num_epochs": 50,
     "lr": 1e-4,
@@ -17,5 +17,6 @@
     "debug": false,
     "log_interval": 10,
     "save_interval": 1,
-    "log_level": "INFO"
+    "log_level": "INFO",
+    "max_text_length": 256
 }

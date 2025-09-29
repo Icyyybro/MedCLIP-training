@@ -319,9 +319,9 @@ def create_data_loaders(args):
         
         # 使用MedCLIPProcessor处理文本
         if 'processor' in locals():
-            # 直接使用processor的tokenizer，确保最大长度为77
+            # 直接使用processor的tokenizer，确保最大长度为300
             tokenizer = processor.tokenizer
-            enc = tokenizer(texts, padding='max_length', truncation=True, max_length=77, return_tensors='pt')
+            enc = tokenizer(texts, padding='max_length', truncation=True, max_length=300, return_tensors='pt')
             return {
                 'pixel_values': images,
                 'input_ids': enc['input_ids'],
@@ -331,8 +331,8 @@ def create_data_loaders(args):
                 'texts': texts
             }
         else:
-            # 回退到原来的方法，使用77作为最大长度
-            enc = tokenizer(texts, padding='max_length', truncation=True, max_length=77, return_tensors='pt')
+            # 回退到原来的方法，使用300作为最大长度
+            enc = tokenizer(texts, padding='max_length', truncation=True, max_length=300, return_tensors='pt')
             return {
                 'pixel_values': images,
                 'input_ids': enc['input_ids'],
