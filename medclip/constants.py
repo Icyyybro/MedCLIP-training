@@ -1,8 +1,8 @@
 '''drawn from Gloria github: https://github.com/marshuang80/gloria
 '''
 
-BERT_TYPE = 'emilyalsentzer/Bio_ClinicalBERT'
-VIT_TYPE = 'microsoft/swin-tiny-patch4-window7-224'
+BERT_TYPE = '/root/autodl-tmp/model/medclip/pretrained/bert-model/Bio_ClinicalBERT'
+VIT_TYPE = '/root/autodl-tmp/model/medclip/pretrained/vit-model/swin-tiny-patch4-window7-224'
 
 IMG_SIZE = 224
 IMG_MEAN = .5862785803043838

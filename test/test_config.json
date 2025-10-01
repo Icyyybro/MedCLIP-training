@@ -1,0 +1,30 @@
+{
+    "checkpoint_path": "/root/autodl-tmp/model/medclip/checkpoints/checkpoint_epoch_20.pth",
+    "medclip_weight_dir": "/root/autodl-tmp/model/medclip/pretrained",
+    "bert_path": "/root/autodl-tmp/model/medclip/pretrained/bert-model/Bio_ClinicalBERT",
+    "vit_path": "/root/autodl-tmp/model/medclip/pretrained/vit-model/swin-tiny-patch4-window7-224",
+    "test_batch_size": 16,
+    "data_path": "/root/autodl-tmp/mimic_cxr/datasets.pkl",
+    "use_mimic_dataset": true,
+    "class_names": [
+        "No Finding",
+        "Enlarged Cardiomediastinum",
+        "Cardiomegaly",
+        "Lung Lesion",
+        "Lung Opacity",
+        "Edema",
+        "Consolidation",
+        "Pneumonia",
+        "Atelectasis",
+        "Pneumothorax",
+        "Pleural Effusion",
+        "Pleural Other",
+        "Fracture",
+        "Support Devices"
+    ],
+    "output_dir": "./test_results_mimic",
+    "gpu_id": 0,
+    "seed": 42,
+    "num_classes": 14,
+    "max_text_length": 128
+}

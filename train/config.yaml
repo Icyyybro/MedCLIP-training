@@ -1,0 +1,51 @@
+# MedCLIP训练配置文件
+
+# 数据路径配置
+data:
+  image_data_path: "/root/autodl-tmp/mimic_cxr/datasets.pkl"
+  text_data_path: "/root/MedCLIP-main/local_data/sentence-label.csv"
+  pretrained_path: "/root/autodl-tmp/model/medclip/pretrained/medclip-vit"
+
+# 训练参数
+training:
+  batch_size: 32
+  num_epochs: 10
+  learning_rate: 2e-5
+  weight_decay: 1e-4
+  warmup_ratio: 0.1
+
+# 系统参数
+system:
+  num_workers: 4
+  device: "cuda:0"
+  seed: 42
+
+# 保存配置
+save:
+  save_steps: 1000
+  output_dir: "./checkpoints"
+
+# 模型配置
+model:
+  vision_cls: "MedCLIPVisionModelViT"
+  logit_scale_init_value: 0.07
+
+# 数据增强配置
+augmentation:
+  image_size: 224
+  random_rotation_degrees: 5
+  color_jitter_brightness: 0.1
+  color_jitter_contrast: 0.1
+  random_horizontal_flip_prob: 0.5
+
+# 验证配置
+validation:
+  val_batch_size: 32
+  val_frequency: 1  # 每N个epoch验证一次
+
+# 日志配置
+logging:
+  log_level: "INFO"
+  log_interval: 100  # 每N个batch打印一次日志
+  save_logs: true
+  log_dir: "./logs"

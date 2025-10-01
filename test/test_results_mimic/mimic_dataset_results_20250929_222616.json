@@ -1,0 +1,16 @@
+{
+  "image_to_text_recalls": {
+    "recall@1": 0.17254901960784313,
+    "recall@5": 0.40784313725490196,
+    "recall@10": 0.5647058823529412
+  },
+  "text_to_image_recalls": {
+    "recall@1": 0.09803921568627451,
+    "recall@5": 0.3568627450980392,
+    "recall@10": 0.5294117647058824
+  },
+  "mean_image_to_text_rank": 19.886274509803922,
+  "mean_text_to_image_rank": 22.44313725490196,
+  "total_samples": 255,
+  "test_time": 5.278933048248291
+}
