@@ -9,11 +9,13 @@ from torchvision import transforms
 from transformers import AutoTokenizer
 import json
 from tqdm import tqdm
+from itertools import cycle, zip_longest
 
 # 添加medclip模块路径
 sys.path.append('/root/MedCLIP-main')
 
 from medclip.modeling_medclip import MedCLIPModel, MedCLIPVisionModelViT
+from medclip.losses import ImageTextContrastiveLoss
 from medclip import constants
 from train.image_dataset import ImageLabelDataset, TextLabelDataset, create_image_collate_fn, create_text_collate_fn
 
@@ -93,10 +95,29 @@ def create_data_loaders(args):
         transform=val_transform
     )
     
-    # 创建文本数据集
+    # 创建文本数据集（使用分离的训练和验证文件）
     train_text_dataset = TextLabelDataset(
-        csv_path=args.text_data_path
+        csv_path=args.text_data_path_train,
+        split='train'
     )
+    
+    # 验证文本数据集
+    val_text_dataset = TextLabelDataset(
+        csv_path=args.text_data_path_val,
+        split='val'
+    )
+    
+    # 打印数据集大小信息
+    print(f"图像训练集大小: {len(train_image_dataset)}")
+    print(f"图像验证集大小: {len(val_image_dataset)}")
+    print(f"文本训练集大小: {len(train_text_dataset)}")
+    print(f"文本验证集大小: {len(val_text_dataset)}")
+    
+    # 计算文本数据集的重复次数
+    train_text_repeats = len(train_image_dataset) // len(train_text_dataset)
+    val_text_repeats = len(val_image_dataset) // len(val_text_dataset)
+    print(f"训练时文本数据集将重复 {train_text_repeats} 次")
+    print(f"验证时文本数据集将重复 {val_text_repeats} 次")
     
     # 创建collate函数
     image_collate_fn = create_image_collate_fn()
@@ -131,7 +152,16 @@ def create_data_loaders(args):
         pin_memory=True
     )
     
-    return train_image_loader, val_image_loader, train_text_loader, tokenizer
+    val_text_loader = DataLoader(
+        val_text_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        collate_fn=text_collate_fn,
+        num_workers=args.num_workers,
+        pin_memory=True
+    )
+    
+    return train_image_loader, val_image_loader, train_text_loader, val_text_loader, tokenizer
 
 def create_model(args):
     """创建模型"""
@@ -141,104 +171,154 @@ def create_model(args):
         checkpoint=args.pretrained_path
     )
     
-    return model
+    # 创建软标签对比学习损失函数
+    loss_model = ImageTextContrastiveLoss(model)
+    
+    return model, loss_model
 
-def train_epoch(model, train_image_loader, train_text_loader, 
+def process_batch(model, loss_model, image_batch, text_batch, device, training=True):
+    """处理一个批次的数据并计算损失"""
+    # 移动数据到设备
+    images = image_batch['images'].to(device)
+    image_labels = image_batch['labels'].to(device)
+    
+    text_input_ids = text_batch['input_ids'].to(device)
+    text_attention_mask = text_batch['attention_mask'].to(device)
+    text_labels = text_batch['labels'].to(device)
+    
+    # 使用MedCLIP的软标签对比学习
+    loss_outputs = loss_model(
+        input_ids=text_input_ids,
+        pixel_values=images,
+        attention_mask=text_attention_mask,
+        img_labels=image_labels,
+        text_labels=text_labels
+    )
+    
+    # 获取损失
+    total_batch_loss = loss_outputs['loss_value']
+    
+    # 只在训练模式下进行反向传播
+    if training:
+        total_batch_loss.backward()
+    
+    return total_batch_loss.item()
+
+def update_progress(pbar, loss, batch_idx, args, model, optimizer, epoch):
+    """更新进度条"""
+    pbar.set_postfix({
+        'Loss': f'{loss:.4f}'
+    })
+    pbar.update(1)
+    
+    # 定期保存检查点
+    if batch_idx > 0 and batch_idx % args.save_steps == 0:
+        save_checkpoint(model, optimizer, epoch, batch_idx, args)
+
+def train_epoch(model, loss_model, train_image_loader, train_text_loader, 
                 optimizer, device, epoch, args):
     """训练一个epoch"""
     model.train()
     
     total_loss = 0
     
-    # 创建进度条
-    pbar = tqdm(total=len(train_image_loader), desc=f'Epoch {epoch}')
-    
-    for batch_idx, (image_batch, text_batch) in enumerate(zip(train_image_loader, train_text_loader)):
-        # 移动数据到设备
-        images = image_batch['images'].to(device)
-        image_labels = image_batch['labels'].to(device)
-        captions = image_batch['captions']
+    # 根据策略选择数据配对方式
+    if args.data_pairing_strategy == 'cycle':
+        # 使用cycle让文本数据加载器循环，以匹配图像数据加载器的长度
+        text_loader_cycle = cycle(train_text_loader)
+        pbar = tqdm(total=len(train_image_loader), desc=f'Epoch {epoch}')
         
-        text_input_ids = text_batch['input_ids'].to(device)
-        text_attention_mask = text_batch['attention_mask'].to(device)
-        text_labels = text_batch['labels'].to(device)
+        for batch_idx, image_batch in enumerate(train_image_loader):
+            text_batch = next(text_loader_cycle)
+            optimizer.zero_grad()
+            loss = process_batch(model, loss_model, image_batch, text_batch, device)
+            optimizer.step()
+            total_loss += loss
+            update_progress(pbar, loss, batch_idx, args, model, optimizer, epoch)
+            
+    elif args.data_pairing_strategy == 'zip_longest':
+        # 使用zip_longest，较短的序列用None填充
+        pbar = tqdm(total=max(len(train_image_loader), len(train_text_loader)), desc=f'Epoch {epoch}')
         
-        optimizer.zero_grad()
+        for batch_idx, (image_batch, text_batch) in enumerate(zip_longest(train_image_loader, train_text_loader, fillvalue=None)):
+            if image_batch is None or text_batch is None:
+                continue  # 跳过不完整的批次
+            optimizer.zero_grad()
+            loss = process_batch(model, loss_model, image_batch, text_batch, device)
+            optimizer.step()
+            total_loss += loss
+            update_progress(pbar, loss, batch_idx, args, model, optimizer, epoch)
+            
+    elif args.data_pairing_strategy == 'separate':
+        # 分别训练图像和文本（这里简化为只训练图像）
+        pbar = tqdm(total=len(train_image_loader), desc=f'Epoch {epoch}')
         
-        # 直接使用模型进行前向传播和损失计算
-        model_outputs = model(
-            input_ids=text_input_ids,
-            pixel_values=images,
-            attention_mask=text_attention_mask,
-            return_loss=True
-        )
-        
-        # 获取损失
-        total_batch_loss = model_outputs['loss_value']
-        
-        # 反向传播
-        total_batch_loss.backward()
-        optimizer.step()
-        
-        # 更新统计
-        total_loss += total_batch_loss.item()
-        
-        # 更新进度条
-        pbar.set_postfix({
-            'Loss': f'{total_batch_loss.item():.4f}'
-        })
-        pbar.update(1)
-        
-        # 定期保存检查点
-        if batch_idx % args.save_steps == 0:
-            save_checkpoint(model, optimizer, epoch, batch_idx, args)
+        for batch_idx, image_batch in enumerate(train_image_loader):
+            # 随机选择一个文本批次
+            text_batch = next(iter(train_text_loader))
+            optimizer.zero_grad()
+            loss = process_batch(model, loss_model, image_batch, text_batch, device)
+            optimizer.step()
+            total_loss += loss
+            update_progress(pbar, loss, batch_idx, args, model, optimizer, epoch)
     
     pbar.close()
-    
     return total_loss / len(train_image_loader)
 
-def validate(model, val_image_loader, val_text_loader, device, epoch):
+def validate(model, loss_model, val_image_loader, val_text_loader, device, epoch, args):
     """验证模型"""
     model.eval()
     
     total_loss = 0
     
     with torch.no_grad():
-        for image_batch, text_batch in zip(val_image_loader, val_text_loader):
-            # 移动数据到设备
-            images = image_batch['images'].to(device)
-            image_labels = image_batch['labels'].to(device)
+        if args.data_pairing_strategy == 'cycle':
+            # 使用cycle让文本数据加载器循环，以匹配图像数据加载器的长度
+            text_loader_cycle = cycle(val_text_loader)
             
-            text_input_ids = text_batch['input_ids'].to(device)
-            text_attention_mask = text_batch['attention_mask'].to(device)
-            text_labels = text_batch['labels'].to(device)
-            
-            # 直接使用模型进行前向传播和损失计算
-            model_outputs = model(
-                input_ids=text_input_ids,
-                pixel_values=images,
-                attention_mask=text_attention_mask,
-                return_loss=True
-            )
-            
-            total_loss += model_outputs['loss_value'].item()
+            for image_batch in val_image_loader:
+                text_batch = next(text_loader_cycle)
+                loss = process_batch(model, loss_model, image_batch, text_batch, device, training=False)
+                total_loss += loss
+                
+        elif args.data_pairing_strategy == 'zip_longest':
+            for image_batch, text_batch in zip_longest(val_image_loader, val_text_loader, fillvalue=None):
+                if image_batch is None or text_batch is None:
+                    continue
+                loss = process_batch(model, loss_model, image_batch, text_batch, device, training=False)
+                total_loss += loss
+                
+        elif args.data_pairing_strategy == 'separate':
+            for image_batch in val_image_loader:
+                text_batch = next(iter(val_text_loader))
+                loss = process_batch(model, loss_model, image_batch, text_batch, device, training=False)
+                total_loss += loss
     
     avg_loss = total_loss / len(val_image_loader)
-    
     return avg_loss
 
 def save_checkpoint(model, optimizer, epoch, batch_idx, args):
     """保存检查点"""
-    checkpoint = {
-        'epoch': epoch,
-        'batch_idx': batch_idx,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-    }
-    
-    checkpoint_path = os.path.join(args.output_dir, f'checkpoint_epoch_{epoch}_batch_{batch_idx}.pth')
-    torch.save(checkpoint, checkpoint_path)
-    print(f"Checkpoint saved to {checkpoint_path}")
+    try:
+        checkpoint = {
+            'epoch': epoch,
+            'batch_idx': batch_idx,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+        }
+        
+        checkpoint_path = os.path.join(args.output_dir, f'checkpoint_epoch_{epoch}_batch_{batch_idx}.pth')
+        
+        # 确保输出目录存在
+        os.makedirs(args.output_dir, exist_ok=True)
+        
+        # 保存检查点
+        torch.save(checkpoint, checkpoint_path)
+        print(f"Checkpoint saved to {checkpoint_path}")
+        
+    except Exception as e:
+        print(f"Warning: Failed to save checkpoint: {e}")
+        print("Continuing training without saving checkpoint...")
 
 def main():
     parser = argparse.ArgumentParser(description='Train MedCLIP model with contrastive learning')
@@ -247,9 +327,12 @@ def main():
     parser.add_argument('--image_data_path', type=str, 
                        default='/root/autodl-tmp/mimic_cxr/datasets.pkl',
                        help='Path to image dataset pickle file')
-    parser.add_argument('--text_data_path', type=str,
-                       default='/root/MedCLIP-main/local_data/sentence-label.csv',
-                       help='Path to text dataset CSV file')
+    parser.add_argument('--text_data_path_train', type=str,
+                       default='/root/MedCLIP-main/local_data/sentence-label_train.csv',
+                       help='Path to training text dataset CSV file')
+    parser.add_argument('--text_data_path_val', type=str,
+                       default='/root/MedCLIP-main/local_data/sentence-label val.csv',
+                       help='Path to validation text dataset CSV file')
     parser.add_argument('--pretrained_path', type=str,
                        default='/root/autodl-tmp/model/medclip/pretrained/medclip-vit',
                        help='Path to pretrained model weights')
@@ -264,9 +347,12 @@ def main():
     # 其他参数
     parser.add_argument('--num_workers', type=int, default=4, help='Number of workers')
     parser.add_argument('--save_steps', type=int, default=1000, help='Save checkpoint every N steps')
-    parser.add_argument('--output_dir', type=str, default='./checkpoints', help='Output directory')
+    parser.add_argument('--output_dir', type=str, default='/root/autodl-pub/medclip_checkpoints', help='Output directory')
     parser.add_argument('--device', type=str, default='cuda:0', help='Device to use')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--data_pairing_strategy', type=str, default='cycle', 
+                       choices=['cycle', 'zip_longest', 'separate'],
+                       help='Strategy for pairing image and text data: cycle (repeat smaller dataset), zip_longest (pad with None), separate (train separately)')
     
     args = parser.parse_args()
     
@@ -282,14 +368,15 @@ def main():
     
     # 创建数据加载器
     print("Creating data loaders...")
-    train_image_loader, val_image_loader, train_text_loader, tokenizer = create_data_loaders(args)
+    train_image_loader, val_image_loader, train_text_loader, val_text_loader, tokenizer = create_data_loaders(args)
     
     # 创建模型
     print("Creating model...")
-    model = create_model(args)
+    model, loss_model = create_model(args)
     
     # 移动模型到设备
     model = model.to(device)
+    loss_model = loss_model.to(device)
     
     # 创建优化器
     optimizer = torch.optim.AdamW(
@@ -307,12 +394,12 @@ def main():
         
         # 训练
         train_loss = train_epoch(
-            model, train_image_loader, train_text_loader, 
+            model, loss_model, train_image_loader, train_text_loader, 
             optimizer, device, epoch + 1, args
         )
         
         # 验证
-        val_loss = validate(model, val_image_loader, train_text_loader, device, epoch + 1)
+        val_loss = validate(model, loss_model, val_image_loader, val_text_loader, device, epoch + 1, args)
         
         print(f"Train Loss: {train_loss:.4f}")
         print(f"Val Loss: {val_loss:.4f}")

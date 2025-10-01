@@ -3,12 +3,13 @@
 # 数据路径配置
 data:
   image_data_path: "/root/autodl-tmp/mimic_cxr/datasets.pkl"
-  text_data_path: "/root/MedCLIP-main/local_data/sentence-label.csv"
+  text_data_path_train: "/root/MedCLIP-main/local_data/sentence-label_train.csv"
+  text_data_path_val: "/root/MedCLIP-main/local_data/sentence-label val.csv"
   pretrained_path: "/root/autodl-tmp/model/medclip/pretrained/medclip-vit"
 
 # 训练参数
 training:
-  batch_size: 32
+  batch_size: 128  
   num_epochs: 10
   learning_rate: 2e-5
   weight_decay: 1e-4
@@ -22,8 +23,8 @@ system:
 
 # 保存配置
 save:
-  save_steps: 1000
-  output_dir: "./checkpoints"
+  save_steps: 5000  # 减少保存频率以节省磁盘空间
+  output_dir: "/root/autodl-tmp/medclip_checkpoints"
 
 # 模型配置
 model:

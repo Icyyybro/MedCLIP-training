@@ -66,6 +66,8 @@ class ImageLabelDataset(Dataset):
         self.dataset = datasets[split]
         print(f"Loaded {split} dataset with {len(self.dataset)} samples")
         
+        # 注意：CLIP特征在当前训练中未使用，已移除以提高性能
+        
         # 设置默认变换
         if self.transform is None:
             self.transform = transforms.Compose([
@@ -90,18 +92,12 @@ class ImageLabelDataset(Dataset):
                 image_path = ann['image_path']
                 image = Image.open(os.path.join('/root/autodl-tmp/mimic_cxr/', image_path[0])).convert('RGB')
                 
-                # 处理文本
-                caption = ann['report']
+                # 文本在当前训练中未使用，跳过加载
                 
-                # 处理标签
+                # 处理图像标签
                 cls_labels = torch.from_numpy(np.array(ann['labels']))
                 
-                # 处理CLIP特征
-                with open('/root/autodl-tmp/mimic_cxr/clip_text_features.json', 'r') as f:
-                    clip_features = np.array(json.load(f))
-                clip_indices = ann['clip_indices'][:21]
-                clip_memory = clip_features[clip_indices]
-                clip_memory = torch.from_numpy(clip_memory).float()
+                # CLIP特征在当前训练中未使用，跳过加载
             else:
                 # 如果已经是4个值，直接解包
                 image, caption, cls_labels, clip_memory = data
@@ -111,18 +107,12 @@ class ImageLabelDataset(Dataset):
             image_path = ann['image_path']
             image = Image.open(os.path.join('/root/autodl-tmp/mimic_cxr/', image_path[0])).convert('RGB')
             
-            # 处理文本
-            caption = ann['report']
+            # 文本在当前训练中未使用，跳过加载
             
-            # 处理标签
+            # 处理图像标签
             cls_labels = torch.from_numpy(np.array(ann['labels']))
             
-            # 处理CLIP特征
-            with open('/root/autodl-tmp/mimic_cxr/clip_text_features.json', 'r') as f:
-                clip_features = np.array(json.load(f))
-            clip_indices = ann['clip_indices'][:21]
-            clip_memory = clip_features[clip_indices]
-            clip_memory = torch.from_numpy(clip_memory).float()
+            # CLIP特征在当前训练中未使用，跳过加载
         
         # 处理标签维度不一致的问题
         if cls_labels.shape[0] == 18:
@@ -140,7 +130,7 @@ class ImageLabelDataset(Dataset):
                 padding = torch.zeros(14 - cls_labels.shape[0], dtype=cls_labels.dtype)
                 cls_labels = torch.cat([cls_labels, padding])
         
-        # 将标签转换为float类型，用于对比学习
+        # 将标签转换为float类型，用于软标签对比学习
         cls_labels = cls_labels.float()
         
         # 图像已经是tensor，需要转换为PIL Image进行变换
@@ -161,21 +151,18 @@ class ImageLabelDataset(Dataset):
         
         return {
             'image': image,
-            'labels': cls_labels,  # 14个类别的标签 (0-3)
-            'caption': caption,    # 文本描述
-            'clip_memory': clip_memory  # CLIP记忆特征
+            'labels': cls_labels   # 14个类别的标签，用于软标签对比学习
         }
 
 class TextLabelDataset(Dataset):
     """文本-标签数据集，从CSV文件加载数据"""
     
-    def __init__(self, csv_path, split='train', transform=None, train_ratio=0.8):
+    def __init__(self, csv_path, split='train', transform=None):
         """
         Args:
             csv_path: CSV文件路径
-            split: 数据集分割 ('train', 'val')
+            split: 数据集分割 ('train', 'val') - 仅用于标识，不进行内部分割
             transform: 文本变换（这里暂时不使用）
-            train_ratio: 训练集比例
         """
         import pandas as pd
         
@@ -185,15 +172,6 @@ class TextLabelDataset(Dataset):
         
         # 获取标签列（除了第一列Reports和Unnamed: 0）
         self.label_columns = [col for col in self.df.columns if col not in ['Reports', 'Unnamed: 0']]
-        
-        # 分割数据集
-        total_samples = len(self.df)
-        train_size = int(total_samples * train_ratio)
-        
-        if split == 'train':
-            self.df = self.df.iloc[:train_size]
-        elif split == 'val':
-            self.df = self.df.iloc[train_size:]
         
         print(f"Loaded {split} text dataset with {len(self.df)} samples")
         print(f"Label columns: {self.label_columns}")
@@ -218,14 +196,10 @@ def create_image_collate_fn():
     def collate_fn(batch):
         images = torch.stack([item['image'] for item in batch])
         labels = torch.stack([item['labels'] for item in batch])
-        captions = [item['caption'] for item in batch]
-        clip_memories = torch.stack([item['clip_memory'] for item in batch])
         
         return {
             'images': images,
-            'labels': labels,
-            'captions': captions,
-            'clip_memories': clip_memories
+            'labels': labels
         }
     return collate_fn
 

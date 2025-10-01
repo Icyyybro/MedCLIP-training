@@ -27,7 +27,8 @@ with open('config.yaml', 'r', encoding='utf-8') as f:
 args = [
     'python3', 'train_contrastive.py',
     '--image_data_path', config['data']['image_data_path'],
-    '--text_data_path', config['data']['text_data_path'],
+    '--text_data_path_train', config['data']['text_data_path_train'],
+    '--text_data_path_val', config['data']['text_data_path_val'],
     '--pretrained_path', config['data']['pretrained_path'],
     '--batch_size', str(config['training']['batch_size']),
     '--num_epochs', str(config['training']['num_epochs']),
