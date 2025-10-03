@@ -3,8 +3,8 @@
 # 数据路径配置
 data:
   image_data_path: "/root/autodl-tmp/mimic_cxr/datasets.pkl"
-  text_data_path_train: "/root/MedCLIP-main/local_data/sentence-label_train.csv"
-  text_data_path_val: "/root/MedCLIP-main/local_data/sentence-label val.csv"
+  text_data_path_train: "/root/autodl-tmp/mimic_cxr/sentence_label/sentence_label_train.csv"
+  text_data_path_val: "/root/autodl-tmp/mimic_cxr/sentence_label/sentence_label_train.csv"
   pretrained_path: "/root/autodl-tmp/model/medclip/pretrained/medclip-vit"
 
 # 训练参数

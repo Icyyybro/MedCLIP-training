@@ -170,8 +170,8 @@ class TextLabelDataset(Dataset):
         self.transform = transform
         self.split = split
         
-        # 获取标签列（除了第一列Reports和Unnamed: 0）
-        self.label_columns = [col for col in self.df.columns if col not in ['Reports', 'Unnamed: 0']]
+        # 获取标签列（除了id、report和Unnamed: 0列）
+        self.label_columns = [col for col in self.df.columns if col not in ['id', 'report', 'Unnamed: 0']]
         
         print(f"Loaded {split} text dataset with {len(self.df)} samples")
         print(f"Label columns: {self.label_columns}")
@@ -183,7 +183,7 @@ class TextLabelDataset(Dataset):
         row = self.df.iloc[idx]
         
         # 获取文本和标签
-        text = str(row['Reports'])
+        text = str(row['report'])
         labels = torch.tensor([row[col] for col in self.label_columns], dtype=torch.float32)
         
         return {

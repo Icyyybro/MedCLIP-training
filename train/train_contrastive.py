@@ -224,17 +224,38 @@ def train_epoch(model, loss_model, train_image_loader, train_text_loader,
     
     # 根据策略选择数据配对方式
     if args.data_pairing_strategy == 'cycle':
-        # 使用cycle让文本数据加载器循环，以匹配图像数据加载器的长度
-        text_loader_cycle = cycle(train_text_loader)
-        pbar = tqdm(total=len(train_image_loader), desc=f'Epoch {epoch}')
+        # 动态判断哪个数据集更小，让较小的数据集循环
+        image_len = len(train_image_loader)
+        text_len = len(train_text_loader)
         
-        for batch_idx, image_batch in enumerate(train_image_loader):
-            text_batch = next(text_loader_cycle)
-            optimizer.zero_grad()
-            loss = process_batch(model, loss_model, image_batch, text_batch, device)
-            optimizer.step()
-            total_loss += loss
-            update_progress(pbar, loss, batch_idx, args, model, optimizer, epoch)
+        print(f"图像数据集批次数: {image_len}, 文本数据集批次数: {text_len}")
+        
+        if image_len <= text_len:
+            # 图像数据集更小，让图像数据集循环
+            print("图像数据集更小，让图像数据集循环")
+            image_loader_cycle = cycle(train_image_loader)
+            pbar = tqdm(total=text_len, desc=f'Epoch {epoch}')
+            
+            for batch_idx, text_batch in enumerate(train_text_loader):
+                image_batch = next(image_loader_cycle)
+                optimizer.zero_grad()
+                loss = process_batch(model, loss_model, image_batch, text_batch, device)
+                optimizer.step()
+                total_loss += loss
+                update_progress(pbar, loss, batch_idx, args, model, optimizer, epoch)
+        else:
+            # 文本数据集更小，让文本数据集循环
+            print("文本数据集更小，让文本数据集循环")
+            text_loader_cycle = cycle(train_text_loader)
+            pbar = tqdm(total=image_len, desc=f'Epoch {epoch}')
+            
+            for batch_idx, image_batch in enumerate(train_image_loader):
+                text_batch = next(text_loader_cycle)
+                optimizer.zero_grad()
+                loss = process_batch(model, loss_model, image_batch, text_batch, device)
+                optimizer.step()
+                total_loss += loss
+                update_progress(pbar, loss, batch_idx, args, model, optimizer, epoch)
             
     elif args.data_pairing_strategy == 'zip_longest':
         # 使用zip_longest，较短的序列用None填充
@@ -263,7 +284,9 @@ def train_epoch(model, loss_model, train_image_loader, train_text_loader,
             update_progress(pbar, loss, batch_idx, args, model, optimizer, epoch)
     
     pbar.close()
-    return total_loss / len(train_image_loader)
+    # 使用实际处理的批次数量计算平均损失
+    actual_batches = max(len(train_image_loader), len(train_text_loader)) if args.data_pairing_strategy == 'zip_longest' else min(len(train_image_loader), len(train_text_loader))
+    return total_loss / actual_batches
 
 def validate(model, loss_model, val_image_loader, val_text_loader, device, epoch, args):
     """验证模型"""
@@ -273,13 +296,26 @@ def validate(model, loss_model, val_image_loader, val_text_loader, device, epoch
     
     with torch.no_grad():
         if args.data_pairing_strategy == 'cycle':
-            # 使用cycle让文本数据加载器循环，以匹配图像数据加载器的长度
-            text_loader_cycle = cycle(val_text_loader)
+            # 动态判断哪个数据集更小，让较小的数据集循环
+            image_len = len(val_image_loader)
+            text_len = len(val_text_loader)
             
-            for image_batch in val_image_loader:
-                text_batch = next(text_loader_cycle)
-                loss = process_batch(model, loss_model, image_batch, text_batch, device, training=False)
-                total_loss += loss
+            if image_len <= text_len:
+                # 图像数据集更小，让图像数据集循环
+                image_loader_cycle = cycle(val_image_loader)
+                
+                for text_batch in val_text_loader:
+                    image_batch = next(image_loader_cycle)
+                    loss = process_batch(model, loss_model, image_batch, text_batch, device, training=False)
+                    total_loss += loss
+            else:
+                # 文本数据集更小，让文本数据集循环
+                text_loader_cycle = cycle(val_text_loader)
+                
+                for image_batch in val_image_loader:
+                    text_batch = next(text_loader_cycle)
+                    loss = process_batch(model, loss_model, image_batch, text_batch, device, training=False)
+                    total_loss += loss
                 
         elif args.data_pairing_strategy == 'zip_longest':
             for image_batch, text_batch in zip_longest(val_image_loader, val_text_loader, fillvalue=None):
@@ -294,7 +330,9 @@ def validate(model, loss_model, val_image_loader, val_text_loader, device, epoch
                 loss = process_batch(model, loss_model, image_batch, text_batch, device, training=False)
                 total_loss += loss
     
-    avg_loss = total_loss / len(val_image_loader)
+    # 使用实际处理的批次数量计算平均损失
+    actual_batches = max(len(val_image_loader), len(val_text_loader)) if args.data_pairing_strategy == 'zip_longest' else min(len(val_image_loader), len(val_text_loader))
+    avg_loss = total_loss / actual_batches
     return avg_loss
 
 def save_checkpoint(model, optimizer, epoch, batch_idx, args):
